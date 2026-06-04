@@ -6,7 +6,7 @@ def test_admin_status_shape(client):
     assert r.status_code == 200
     body = r.json()
     assert body["service"] == "fsu100v2"
-    assert body["phase"] == 2
+    assert body["phase"] == 3
     assert body["source"]["state"] == "disconnected"
     # Phase 2: mark_6_rules_v1 is loaded on boot.
     plugin_ids = {p["id"] for p in body["plugins"]}
@@ -128,9 +128,20 @@ def test_admin_control_rejects_unknown_verb(client):
     assert r.status_code == 422
 
 
-def test_admin_control_start_phase_1_accepts(client):
-    """Phase 1: start is accepted but not yet wired."""
+def test_admin_control_start_now_wires(client):
+    """Phase 3: start is wired through stream_session.start()."""
     r = client.post("/admin/control/start")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["accepted"] is True
+    assert body["executed"] is True
+
+    # Tear down so other tests aren't affected.
+    client.post("/admin/control/stop")
+
+
+def test_admin_control_reload_plugins_still_stub(client):
+    r = client.post("/admin/control/reload_plugins")
     assert r.status_code == 200
     body = r.json()
     assert body["accepted"] is True

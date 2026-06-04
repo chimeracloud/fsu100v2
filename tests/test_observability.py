@@ -1,6 +1,6 @@
 """Phase 1 — verify the standard observability shell is wired."""
 
-EXPECTED_PHASE = 2
+EXPECTED_PHASE = 3
 
 
 def test_health_returns_ok(client):

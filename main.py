@@ -33,10 +33,11 @@ from core.gcs_config import load_config_from_gcs
 from core.logging import configure_logging
 from core.state import app_state
 from core.version import SERVICE_DESCRIPTION, SERVICE_NAME, VERSION
-from services import admin, observability, plugin_routes
+from services import admin, observability, plugin_routes, stream_routes
 from services.event_publisher import publish
 from services.plugin_loader import load_all_plugins
 from services.source_manifest import refresh_discovery, register_best_effort
+from services.stream_session import stream_session
 
 logger = logging.getLogger(__name__)
 
@@ -78,16 +79,20 @@ async def lifespan(app: FastAPI):
     })
 
     if settings.auto_start:
-        logger.info("auto_start=True — Phase 1 has no source/plugins to start yet.")
+        logger.info("auto_start=True — starting source consumer in background")
+        asyncio.create_task(stream_session.start(), name="auto-start")
     else:
         logger.info(
-            "auto_start=False — engine idle. POST /admin/control/start when "
-            "Phase 3 wires the source consumer."
+            "auto_start=False — engine idle. POST /admin/control/start to begin."
         )
 
     try:
         yield
     finally:
+        try:
+            await stream_session.stop()
+        except Exception:  # noqa: BLE001
+            pass
         try:
             await publish("engine_stopped", {"version": VERSION})
         except Exception:  # noqa: BLE001
@@ -120,3 +125,4 @@ async def _record_endpoint_call(request: Request, call_next):
 app.include_router(observability.router)
 app.include_router(admin.router)
 app.include_router(plugin_routes.router)
+app.include_router(stream_routes.router)

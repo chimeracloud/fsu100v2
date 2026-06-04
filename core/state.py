@@ -11,7 +11,7 @@ without cycles.
 from __future__ import annotations
 
 import asyncio
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal, Optional
@@ -60,6 +60,13 @@ class AppState:
 
         # Activity ring buffer for /admin/activity.
         self._activity: deque[dict] = deque(maxlen=200)
+
+        # Recent markets seen on the SSE — keyed by market_id, ordered by
+        # last-seen, capped so memory stays bounded. Surfaced via /api/markets.
+        self.recent_market_summaries: OrderedDict[str, dict] = OrderedDict()
+
+        # Recent instructions — surfaced via /api/instructions.
+        self.recent_instructions: deque[dict] = deque(maxlen=500)
 
         # SSE pub/sub. Channel "evaluations" carries every plugin verdict;
         # channel "all" mirrors the same. Subscribers held as asyncio.Queue.

@@ -206,7 +206,42 @@ async def control(
             at=now,
         )
 
-    # start / stop / reconnect_source / reload_plugins — Phase 2/3 wiring.
+    if action == "start":
+        from services.stream_session import stream_session
+        result = await stream_session.start()
+        return ControlActionResponse(
+            action=action,
+            accepted=bool(result.get("accepted")),
+            executed=bool(result.get("accepted")),
+            note=result.get("detail", ""),
+            at=now,
+        )
+
+    if action == "stop":
+        from services.stream_session import stream_session
+        result = await stream_session.stop()
+        return ControlActionResponse(
+            action=action,
+            accepted=True,
+            executed=bool(result.get("accepted")),
+            note=result.get("detail", ""),
+            at=now,
+        )
+
+    if action == "reconnect_source":
+        from services.stream_session import stream_session
+        if not stream_session.is_running:
+            raise HTTPException(status_code=409, detail="source not running")
+        stream_session.force_disconnect(reason="manual reconnect_source")
+        return ControlActionResponse(
+            action=action,
+            accepted=True,
+            executed=True,
+            note="forced disconnect; supervisor will reconnect",
+            at=now,
+        )
+
+    # reload_plugins — Phase 4 wiring (live config edit + hot-reload).
     return ControlActionResponse(
         action=action,
         accepted=True,

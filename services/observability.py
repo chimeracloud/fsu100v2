@@ -32,14 +32,26 @@ def health() -> dict[str, Any]:
 def ready(response: Response) -> dict[str, Any]:
     """Readiness.
 
-    Phase 1: shell-only. The source isn't wired yet, so we return 200
-    with mode='idle'. Phase 3 will require:
-      - source SSE connected within `stream_stale_threshold_s`
-      - at least one plugin loaded successfully
+    The engine is "ready" in three normal states:
+      - `disconnected`: engine booted; source not yet started (idle). Ready
+        to accept admin traffic.
+      - `connected` + fresh messages: live, running, data flowing.
+      - `connected` + no recent messages: live, running, upstream is quiet
+        (e.g. between races — outside UK racing hours FSU1B emits SSE
+        comment heartbeats which httpx-sse discards, so `last_message_at`
+        doesn't move). Heartbeat-stale is NOT the same as broken.
+
+    503 only when the source is actively `reconnecting` AND we've been off
+    the wire longer than the stale threshold. Real connection failures
+    surface through the supervisor's reconnect loop + dispatch warnings.
     """
     settings = get_settings()
-    # Phase 1 — no source yet. Always ready for admin traffic.
-    if app_state.source.state == "disconnected":
+    state = app_state.source.state
+    age = app_state.source_age_s()
+    fresh = app_state.source_is_fresh(settings.stream_stale_threshold_s)
+
+    # Idle: engine up, source not started.
+    if state == "disconnected":
         return {
             "ready": True,
             "phase": PHASE,
@@ -48,24 +60,42 @@ def ready(response: Response) -> dict[str, Any]:
             "note": "source not started — POST /admin/control/start to connect",
         }
 
-    # Once Phase 3 wires the source, the freshness gate kicks in here.
-    fresh = app_state.source_is_fresh(settings.stream_stale_threshold_s)
-    if app_state.source.state == "connected" and fresh:
+    # Live + data flowing.
+    if state == "connected" and fresh:
         return {
             "ready": True,
             "phase": PHASE,
             "mode": "running",
             "source_state": "connected",
-            "source_age_s": app_state.source_age_s(),
+            "source_age_s": age,
         }
 
+    # Live + upstream quiet (e.g. between races). Still ready — silence
+    # from FSU1B is a normal state, not a failure.
+    if state == "connected":
+        return {
+            "ready": True,
+            "phase": PHASE,
+            "mode": "connected_idle",
+            "source_state": "connected",
+            "source_age_s": age,
+            "stale_threshold_s": settings.stream_stale_threshold_s,
+            "note": (
+                "connected but no market_change events in the freshness "
+                "window — normal outside racing hours; the supervisor + "
+                "watchdog will force a reconnect if the connection is "
+                "actually dead"
+            ),
+        }
+
+    # Reconnecting / connecting and we've been off the wire too long.
     response.status_code = 503
     return {
         "ready": False,
         "phase": PHASE,
-        "mode": "running",
-        "source_state": app_state.source.state,
-        "source_age_s": app_state.source_age_s(),
+        "mode": "reconnecting",
+        "source_state": state,
+        "source_age_s": age,
         "stale_threshold_s": settings.stream_stale_threshold_s,
     }
 

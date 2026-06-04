@@ -92,12 +92,17 @@ class AppState:
     # ── Warnings ─────────────────────────────────────────────────────────
 
     def add_warning(self, warning: str) -> None:
-        self.warnings.add(warning)
-        self.add_activity("warning_raised", warning)
+        # Only log an activity row when the warning transitions from
+        # absent → present. Re-raising the same warning on every
+        # dispatch would drown the feed.
+        if warning not in self.warnings:
+            self.warnings.add(warning)
+            self.add_activity("warning_raised", warning)
 
     def clear_warning(self, warning: str) -> None:
-        self.warnings.discard(warning)
-        self.add_activity("warning_cleared", warning)
+        if warning in self.warnings:
+            self.warnings.discard(warning)
+            self.add_activity("warning_cleared", warning)
 
     # ── Endpoint call tracking ───────────────────────────────────────────
 

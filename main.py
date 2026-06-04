@@ -33,8 +33,9 @@ from core.gcs_config import load_config_from_gcs
 from core.logging import configure_logging
 from core.state import app_state
 from core.version import SERVICE_DESCRIPTION, SERVICE_NAME, VERSION
-from services import admin, observability
+from services import admin, observability, plugin_routes
 from services.event_publisher import publish
+from services.plugin_loader import load_all_plugins
 from services.source_manifest import refresh_discovery, register_best_effort
 
 logger = logging.getLogger(__name__)
@@ -63,10 +64,14 @@ async def lifespan(app: FastAPI):
     refresh_discovery()
     register_best_effort()
 
+    # Plugins (Phase 2). Load every plugin in Settings.loaded_plugins;
+    # bad plugins log + emit `plugin_failed` but don't block boot.
+    load_all_plugins()
+
     # Infrastructure event: we're up.
     await publish("engine_started", {
         "version": VERSION,
-        "phase": 1,
+        "phase": 2,
         "auto_start": settings.auto_start,
         "service_url": settings.service_url,
         "loaded_plugins": list(settings.loaded_plugins),
@@ -114,3 +119,4 @@ async def _record_endpoint_call(request: Request, call_next):
 
 app.include_router(observability.router)
 app.include_router(admin.router)
+app.include_router(plugin_routes.router)

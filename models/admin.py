@@ -28,6 +28,7 @@ class PluginSummary(BaseModel):
     version: str
     status: str        # "loaded" | "failed" | "configuring"
     last_error: str | None = None
+    loaded_at: str | None = None
 
 
 class AdminStatusResponse(BaseModel):

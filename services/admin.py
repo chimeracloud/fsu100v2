@@ -37,6 +37,7 @@ from models.admin import (
     PluginSummary,
     SourceState,
 )
+from services.plugin_loader import get_registry_summary
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ def status(request: Request) -> AdminStatusResponse:
             connection_count=app_state.source.connection_count,
             reconnect_count=app_state.source.reconnect_count,
         ),
-        plugins=[],  # Phase 2+ populates from loaded plugins
+        plugins=[PluginSummary(**p) for p in get_registry_summary()],
         warnings=sorted(app_state.warnings),
         now=datetime.now(timezone.utc),
     )

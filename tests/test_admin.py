@@ -1,4 +1,4 @@
-"""Phase 1 — verify the Set 1 admin shell is wired and shapes are stable."""
+"""Phase 1 + 2 — verify the Set 1 admin shell is wired and shapes are stable."""
 
 
 def test_admin_status_shape(client):
@@ -6,9 +6,11 @@ def test_admin_status_shape(client):
     assert r.status_code == 200
     body = r.json()
     assert body["service"] == "fsu100v2"
-    assert body["phase"] == 1
+    assert body["phase"] == 2
     assert body["source"]["state"] == "disconnected"
-    assert body["plugins"] == []
+    # Phase 2: mark_6_rules_v1 is loaded on boot.
+    plugin_ids = {p["id"] for p in body["plugins"]}
+    assert "mark_6_rules_v1" in plugin_ids
     assert body["warnings"] == []
 
 

@@ -1,0 +1,58 @@
+# Cloud Build pipeline for FSU100V2.
+#
+# Wires the GitHub trigger that fires on every push to `main`. First
+# deploy is manual via `gcloud run deploy --source=.`; from then on
+# every push redeploys automatically.
+
+substitutions:
+  _REGION: europe-west2
+  _SERVICE: fsu100v2
+  _SA: fsu100v2-sa@chiops.iam.gserviceaccount.com
+  _IMAGE: europe-west2-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/fsu100v2
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_IMAGE}:${SHORT_SHA}
+      - -t
+      - ${_IMAGE}:main
+      - .
+
+  - id: push-sha
+    name: gcr.io/cloud-builders/docker
+    args: [push, "${_IMAGE}:${SHORT_SHA}"]
+
+  - id: push-main
+    name: gcr.io/cloud-builders/docker
+    args: [push, "${_IMAGE}:main"]
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_IMAGE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${PROJECT_ID}
+      - --service-account=${_SA}
+      - --no-allow-unauthenticated
+      - --min-instances=1
+      - --max-instances=1
+      - --cpu=1
+      - --memory=512Mi
+      - --cpu-boost
+      - --no-cpu-throttling
+      - --port=8080
+
+images:
+  - ${_IMAGE}:${SHORT_SHA}
+  - ${_IMAGE}:main
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
